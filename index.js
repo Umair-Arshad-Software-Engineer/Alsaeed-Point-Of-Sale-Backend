@@ -184,8 +184,8 @@ const startServer = async () => {
             process.exit(1);
         }
 
-        await sequelize.sync({ alter: true });
-        console.log('✅ Database synchronized');
+        // await sequelize.sync({ alter: true });
+        // console.log('✅ Database synchronized');
 
         await createSuperAdmin();
 

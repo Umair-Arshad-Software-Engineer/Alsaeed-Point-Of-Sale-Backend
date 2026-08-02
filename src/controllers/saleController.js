@@ -1,14 +1,22 @@
+const crypto = require('crypto');
 const db = require('../models');
 
 // Shared product attributes — matches the actual products table column name
 const PRODUCT_ATTRS = ['id', 'name', 'sale_rate'];
 
+// Fallback branch id used only when a user has no assigned branch
+// (e.g. super_admin) and the client didn't supply one either.
+// TODO: replace with proper branch-selection UI, then remove this fallback.
+const DEFAULT_BRANCH_ID = process.env.DEFAULT_BRANCH_ID
+    ? parseInt(process.env.DEFAULT_BRANCH_ID, 10)
+    : null; // no hardcoded guess — must be set explicitly or resolved elsewhere
+
 // Get all sales
 const getAllSales = async (req, res) => {
     try {
-        const whereClause = req.user.role === 'user' 
-            ? { sold_by: req.user.id }  // users see only their own
-            : {};                        // admin/super_admin see all
+        const whereClause = req.user.role === 'user'
+            ? { sold_by: req.user.id }
+            : {};
 
         const sales = await db.Sale.findAll({
             where: whereClause,
@@ -54,12 +62,35 @@ const getSale = async (req, res) => {
 // Create sale (Both user and admin)
 const createSale = async (req, res) => {
     try {
-        const { items, customer_name, customer_phone, discount = 0 } = req.body;
+        const { items, customer_name, customer_phone, discount = 0, branch_id } = req.body;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'At least one item is required' 
+            return res.status(400).json({
+                success: false,
+                message: 'At least one item is required'
+            });
+        }
+
+        // Resolve branch_id:
+        // 1. Use the logged-in user's own branch if they have one
+        // 2. Otherwise use branch_id explicitly sent by the client (e.g. super_admin picking a branch)
+        // 3. Otherwise fall back to DEFAULT_BRANCH_ID so sales aren't blocked
+        const resolvedBranchId = req.user.branch_id || branch_id || DEFAULT_BRANCH_ID;
+
+        if (!resolvedBranchId) {
+            return res.status(400).json({
+                success: false,
+                message: 'branch_id is required (no user branch, no branch_id provided, and DEFAULT_BRANCH_ID not configured)'
+            });
+        }
+
+        // Verify the branch actually exists before attempting the insert —
+        // avoids a raw FK constraint error and gives a clear message instead.
+        const branchExists = await db.Branch.findByPk(resolvedBranchId);
+        if (!branchExists) {
+            return res.status(400).json({
+                success: false,
+                message: `branch_id ${resolvedBranchId} does not exist. Check your DEFAULT_BRANCH_ID env value or the branch_id sent by the client.`
             });
         }
 
@@ -68,7 +99,6 @@ const createSale = async (req, res) => {
             let subtotal = 0;
             const resolvedItems = [];
 
-            // Process each item
             for (const item of items) {
                 const product = await db.Product.findByPk(item.product_id, { transaction: t });
                 if (!product) {
@@ -94,8 +124,9 @@ const createSale = async (req, res) => {
                 throw new Error('Discount cannot exceed the subtotal');
             }
 
-            // Create the sale
             const newSale = await db.Sale.create({
+                local_uuid: crypto.randomUUID(),
+                branch_id: resolvedBranchId,
                 customer_name: customer_name || '',
                 customer_phone: customer_phone || '',
                 discount: parsedDiscount,
@@ -103,19 +134,16 @@ const createSale = async (req, res) => {
                 sold_by: req.user.id,
             }, { transaction: t });
 
-            // Create sale items
             for (const item of resolvedItems) {
-                await db.SaleItem.create({ 
-                    ...item, 
-                    sale_id: newSale.id 
+                await db.SaleItem.create({
+                    ...item,
+                    sale_id: newSale.id
                 }, { transaction: t });
             }
 
             return newSale;
         });
 
-        // ✅ Transaction is already committed here
-        // Fetch the complete sale with associations
         const fullSale = await db.Sale.findByPk(sale.id, {
             include: [
                 {
@@ -126,20 +154,18 @@ const createSale = async (req, res) => {
             ],
         });
 
-        res.status(201).json({ 
-            success: true, 
-            sale: fullSale, 
+        res.status(201).json({
+            success: true,
+            sale: fullSale,
             message: 'Sale recorded successfully'
         });
 
     } catch (error) {
         console.error('createSale error:', error);
-        
-        // Transaction is automatically handled by Sequelize
-        // Determine appropriate status code based on error message
+
         let status = 500;
         let message = 'Server error';
-        
+
         if (error.message.includes('not found')) {
             status = 404;
             message = error.message;
@@ -150,15 +176,17 @@ const createSale = async (req, res) => {
             status = 400;
             message = error.message;
         }
-        
-        res.status(status).json({ 
-            success: false, 
-            message 
+
+        res.status(status).json({
+            success: false,
+            message
         });
     }
 };
 
 // Replaces all SaleItems for the sale, recalculates totals.
+// Note: branch_id is intentionally left untouched on update — a sale
+// stays associated with the branch it was originally created in.
 const updateSale = async (req, res) => {
     const t = await db.sequelize.transaction();
     try {
@@ -186,7 +214,6 @@ const updateSale = async (req, res) => {
                 return res.status(404).json({ success: false, message: `Product ${item.product_id} not found` });
             }
 
-            // ✅ Use sale_rate — the correct column name (was: product.price)
             const unit_price = parseFloat(product.sale_rate);
             const itemSubtotal = unit_price * item.quantity;
             subtotal += itemSubtotal;
@@ -208,11 +235,9 @@ const updateSale = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Discount cannot exceed the subtotal' });
         }
 
-        // Replace all old SaleItems with the new set
         await db.SaleItem.destroy({ where: { sale_id: sale.id }, transaction: t });
         await db.SaleItem.bulkCreate(resolvedItems, { transaction: t });
 
-        // Update the parent Sale record
         await sale.update({
             customer_name: customer_name ?? sale.customer_name,
             customer_phone: customer_phone ?? sale.customer_phone,
