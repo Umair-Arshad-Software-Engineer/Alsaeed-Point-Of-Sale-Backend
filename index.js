@@ -177,38 +177,74 @@ app.use((req, res) => {
 const startServer = async () => {
     try {
         const dbInitialized = await initializeDatabase();
+
         if (!dbInitialized) {
-            console.error('Failed to initialize database');
+            console.error('❌ Failed to initialize database');
             process.exit(1);
         }
-
-        // await sequelize.sync({ alter: true });
-        // console.log('✅ Database synchronized');
 
         await createSuperAdmin();
 
         app.listen(PORT, '0.0.0.0', () => {
-            console.log(`\n🚀 POS Management System Server is running!`);
+            console.log('\n🚀 POS Management System Server is running!');
             console.log(`📡 Server URL: http://localhost:${PORT}`);
-            console.log(`\n🔐 Super Admin Credentials:`);
-            console.log(`   Email: techsoft@gmail.com`);
-            console.log(`   Password: 1129@AliHaider`);
-            console.log(`\n📊 Available Endpoints:`);
-            console.log(`   • Auth: /api/auth`);
-            console.log(`   • Products: /api/products`);
-            console.log(`   • Categories: /api/categories`);
-            console.log(`   • Brands: /api/brands`);
-            console.log(`   • Units: /api/units`);
-            console.log(`   • Branches: /api/branches`);
-            console.log(`   • Sales: /api/sales`);
-            console.log(`   • Dashboard: /api/dashboard/stats`);
-            console.log(`\n✨ Server is ready to accept requests!\n`);
+            console.log('\n🔐 Super Admin Credentials:');
+            console.log('   Email: techsoft@gmail.com');
+            console.log('   Password: 1129@AliHaider');
+
+            console.log('\n📊 Available Endpoints:');
+            console.log('   • Auth: /api/auth');
+            console.log('   • Products: /api/products');
+            console.log('   • Categories: /api/categories');
+            console.log('   • Brands: /api/brands');
+            console.log('   • Units: /api/units');
+            console.log('   • Branches: /api/branches');
+            console.log('   • Sales: /api/sales');
+            console.log('   • Dashboard: /api/dashboard/stats');
+
+            console.log('\n✨ Server is ready to accept requests!\n');
         });
+
     } catch (error) {
-        console.error('Failed to start server:', error);
+        console.error('❌ Failed to start server:', error);
         process.exit(1);
     }
 };
+// const startServer = async () => {
+//     try {
+//         const dbInitialized = await initializeDatabase();
+//         if (!dbInitialized) {
+//             console.error('Failed to initialize database');
+//             process.exit(1);
+//         }
+
+//         // await sequelize.sync({ alter: true });
+//         // console.log('✅ Database synchronized');
+
+//         await createSuperAdmin();
+
+//         app.listen(PORT, '0.0.0.0', () => {
+//             console.log(`\n🚀 POS Management System Server is running!`);
+//             console.log(`📡 Server URL: http://localhost:${PORT}`);
+//             console.log(`\n🔐 Super Admin Credentials:`);
+//             console.log(`   Email: techsoft@gmail.com`);
+//             console.log(`   Password: 1129@AliHaider`);
+//             console.log(`\n📊 Available Endpoints:`);
+//             console.log(`   • Auth: /api/auth`);
+//             console.log(`   • Products: /api/products`);
+//             console.log(`   • Categories: /api/categories`);
+//             console.log(`   • Brands: /api/brands`);
+//             console.log(`   • Units: /api/units`);
+//             console.log(`   • Branches: /api/branches`);
+//             console.log(`   • Sales: /api/sales`);
+//             console.log(`   • Dashboard: /api/dashboard/stats`);
+//             console.log(`\n✨ Server is ready to accept requests!\n`);
+//         });
+//     } catch (error) {
+//         console.error('Failed to start server:', error);
+//         process.exit(1);
+//     }
+// };
 
 process.on('SIGINT', async () => {
     console.log('\n⚠️  Shutting down server...');
