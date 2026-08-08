@@ -11,8 +11,6 @@ const brandRoutes = require('./src/routes/brandRoutes');
 const unitRoutes = require('./src/routes/unitRoutes');
 const branchRoutes = require('./src/routes/branchRoutes');
 const { createSuperAdmin } = require('./src/controllers/authController');
-
-// ✅ Import from middleware file — don't redefine here
 const { protect, adminOnly, superAdminOnly } = require('./src/middleware/authMiddleware');
 
 dotenv.config();
