@@ -18,7 +18,7 @@ dotenv.config();
 const app = express();
 
 // ✅ FIX: Use PORT from .env or default to 3002
-const PORT = process.env.PORT || 3002;  // ← CHANGED FROM 3001 TO 3002
+const PORT = process.env.PORT || 3005;  // ← CHANGED FROM 3001 TO 3002
 
 // Middleware
 app.use(cors({
