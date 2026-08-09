@@ -16,7 +16,9 @@ const { protect, adminOnly, superAdminOnly } = require('./src/middleware/authMid
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+
+// ✅ FIX: Use PORT from .env or default to 3001
+const PORT = process.env.PORT || 3001;  // ← CHANGED FROM 3000 TO 3001
 
 // Middleware
 app.use(cors({
@@ -34,7 +36,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// ✅ Routes — using imported protect, NOT the local one
+// ✅ Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/products', protect, productRoutes);
 app.use('/api/categories', protect, categoryRoutes);
@@ -188,6 +190,7 @@ const startServer = async () => {
         app.listen(PORT, '0.0.0.0', () => {
             console.log('\n🚀 POS Management System Server is running!');
             console.log(`📡 Server URL: http://localhost:${PORT}`);
+            console.log(`📡 Access from: http://72.60.40.108:${PORT}`);
             console.log('\n🔐 Super Admin Credentials:');
             console.log('   Email: techsoft@gmail.com');
             console.log('   Password: 1129@AliHaider');
@@ -210,41 +213,6 @@ const startServer = async () => {
         process.exit(1);
     }
 };
-// const startServer = async () => {
-//     try {
-//         const dbInitialized = await initializeDatabase();
-//         if (!dbInitialized) {
-//             console.error('Failed to initialize database');
-//             process.exit(1);
-//         }
-
-//         // await sequelize.sync({ alter: true });
-//         // console.log('✅ Database synchronized');
-
-//         await createSuperAdmin();
-
-//         app.listen(PORT, '0.0.0.0', () => {
-//             console.log(`\n🚀 POS Management System Server is running!`);
-//             console.log(`📡 Server URL: http://localhost:${PORT}`);
-//             console.log(`\n🔐 Super Admin Credentials:`);
-//             console.log(`   Email: techsoft@gmail.com`);
-//             console.log(`   Password: 1129@AliHaider`);
-//             console.log(`\n📊 Available Endpoints:`);
-//             console.log(`   • Auth: /api/auth`);
-//             console.log(`   • Products: /api/products`);
-//             console.log(`   • Categories: /api/categories`);
-//             console.log(`   • Brands: /api/brands`);
-//             console.log(`   • Units: /api/units`);
-//             console.log(`   • Branches: /api/branches`);
-//             console.log(`   • Sales: /api/sales`);
-//             console.log(`   • Dashboard: /api/dashboard/stats`);
-//             console.log(`\n✨ Server is ready to accept requests!\n`);
-//         });
-//     } catch (error) {
-//         console.error('Failed to start server:', error);
-//         process.exit(1);
-//     }
-// };
 
 process.on('SIGINT', async () => {
     console.log('\n⚠️  Shutting down server...');
