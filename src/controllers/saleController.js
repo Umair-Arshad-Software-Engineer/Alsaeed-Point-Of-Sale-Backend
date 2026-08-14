@@ -6,10 +6,9 @@ const PRODUCT_ATTRS = ['id', 'name', 'sale_rate'];
 
 // Fallback branch id used only when a user has no assigned branch
 // (e.g. super_admin) and the client didn't supply one either.
-// TODO: replace with proper branch-selection UI, then remove this fallback.
 const DEFAULT_BRANCH_ID = process.env.DEFAULT_BRANCH_ID
     ? parseInt(process.env.DEFAULT_BRANCH_ID, 10)
-    : null; // no hardcoded guess — must be set explicitly or resolved elsewhere
+    : null;
 
 // Get all sales
 const getAllSales = async (req, res) => {
@@ -71,10 +70,7 @@ const createSale = async (req, res) => {
             });
         }
 
-        // Resolve branch_id:
-        // 1. Use the logged-in user's own branch if they have one
-        // 2. Otherwise use branch_id explicitly sent by the client (e.g. super_admin picking a branch)
-        // 3. Otherwise fall back to DEFAULT_BRANCH_ID so sales aren't blocked
+        // Resolve branch_id
         const resolvedBranchId = req.user.branch_id || branch_id || DEFAULT_BRANCH_ID;
 
         if (!resolvedBranchId) {
@@ -84,17 +80,15 @@ const createSale = async (req, res) => {
             });
         }
 
-        // Verify the branch actually exists before attempting the insert —
-        // avoids a raw FK constraint error and gives a clear message instead.
         const branchExists = await db.Branch.findByPk(resolvedBranchId);
         if (!branchExists) {
             return res.status(400).json({
                 success: false,
-                message: `branch_id ${resolvedBranchId} does not exist. Check your DEFAULT_BRANCH_ID env value or the branch_id sent by the client.`
+                message: `branch_id ${resolvedBranchId} does not exist.`
             });
         }
 
-        // ✅ Use managed transaction - automatically commits or rolls back
+        // ✅ Use managed transaction
         const sale = await db.sequelize.transaction(async (t) => {
             let subtotal = 0;
             const resolvedItems = [];
@@ -111,6 +105,7 @@ const createSale = async (req, res) => {
 
                 resolvedItems.push({
                     product_id: item.product_id,
+                    product_name: product.name, // ✅ Store product name
                     quantity: item.quantity,
                     unit_price,
                     subtotal: itemSubtotal,
@@ -184,9 +179,7 @@ const createSale = async (req, res) => {
     }
 };
 
-// Replaces all SaleItems for the sale, recalculates totals.
-// Note: branch_id is intentionally left untouched on update — a sale
-// stays associated with the branch it was originally created in.
+// Update sale
 const updateSale = async (req, res) => {
     const t = await db.sequelize.transaction();
     try {
@@ -221,6 +214,7 @@ const updateSale = async (req, res) => {
             resolvedItems.push({
                 sale_id: sale.id,
                 product_id: item.product_id,
+                product_name: product.name, // ✅ Store product name
                 quantity: item.quantity,
                 unit_price,
                 subtotal: itemSubtotal,
