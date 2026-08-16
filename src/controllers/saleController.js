@@ -58,7 +58,7 @@ const getSale = async (req, res) => {
     }
 };
 
-// Create sale (Both user and admin)
+    //createSale function
 const createSale = async (req, res) => {
     try {
         const { items, customer_name, customer_phone, discount = 0, branch_id } = req.body;
@@ -88,9 +88,9 @@ const createSale = async (req, res) => {
             });
         }
 
-        // ✅ Use managed transaction
         const sale = await db.sequelize.transaction(async (t) => {
             let subtotal = 0;
+            let totalTax = 0;
             const resolvedItems = [];
 
             for (const item of items) {
@@ -99,24 +99,31 @@ const createSale = async (req, res) => {
                     throw new Error(`Product ${item.product_id} not found`);
                 }
 
+                // Get tax percentage from product or from request
+                const taxPercentage = item.tax_percentage || product.tax_percentage || 0;
                 const unit_price = parseFloat(product.sale_rate);
                 const itemSubtotal = unit_price * item.quantity;
+                const itemTax = (itemSubtotal * taxPercentage) / 100;
+                
                 subtotal += itemSubtotal;
+                totalTax += itemTax;
 
                 resolvedItems.push({
                     product_id: item.product_id,
-                    product_name: product.name, // ✅ Store product name
+                    product_name: product.name,
                     quantity: item.quantity,
                     unit_price,
                     subtotal: itemSubtotal,
+                    tax_percentage: taxPercentage,
+                    tax_amount: itemTax, // ✅ Store individual item tax
                 });
             }
 
             const parsedDiscount = parseFloat(discount) || 0;
-            const total_price = subtotal - parsedDiscount;
+            const total_price = subtotal + totalTax - parsedDiscount; // ✅ Total = Subtotal + Tax - Discount
 
             if (total_price < 0) {
-                throw new Error('Discount cannot exceed the subtotal');
+                throw new Error('Discount cannot exceed the total (subtotal + tax)');
             }
 
             const newSale = await db.Sale.create({
@@ -126,6 +133,7 @@ const createSale = async (req, res) => {
                 customer_phone: customer_phone || '',
                 discount: parsedDiscount,
                 total_price,
+                total_tax: totalTax, // ✅ Save total tax for the sale
                 sold_by: req.user.id,
             }, { transaction: t });
 
@@ -179,7 +187,8 @@ const createSale = async (req, res) => {
     }
 };
 
-// Update sale
+//updateSale function (partial)
+
 const updateSale = async (req, res) => {
     const t = await db.sequelize.transaction();
     try {
@@ -198,6 +207,7 @@ const updateSale = async (req, res) => {
         }
 
         let subtotal = 0;
+        let totalTax = 0;
         const resolvedItems = [];
 
         for (const item of items) {
@@ -207,22 +217,28 @@ const updateSale = async (req, res) => {
                 return res.status(404).json({ success: false, message: `Product ${item.product_id} not found` });
             }
 
+            const taxPercentage = item.tax_percentage || product.tax_percentage || 0;
             const unit_price = parseFloat(product.sale_rate);
             const itemSubtotal = unit_price * item.quantity;
+            const itemTax = (itemSubtotal * taxPercentage) / 100;
+            
             subtotal += itemSubtotal;
+            totalTax += itemTax;
 
             resolvedItems.push({
                 sale_id: sale.id,
                 product_id: item.product_id,
-                product_name: product.name, // ✅ Store product name
+                product_name: product.name,
                 quantity: item.quantity,
                 unit_price,
                 subtotal: itemSubtotal,
+                tax_percentage: taxPercentage,
+                tax_amount: itemTax,
             });
         }
 
         const parsedDiscount = parseFloat(discount) || 0;
-        const total_price = subtotal - parsedDiscount;
+        const total_price = subtotal + totalTax - parsedDiscount;
 
         if (total_price < 0) {
             await t.rollback();
@@ -237,6 +253,7 @@ const updateSale = async (req, res) => {
             customer_phone: customer_phone ?? sale.customer_phone,
             discount: parsedDiscount,
             total_price,
+            total_tax: totalTax, // ✅ Update total tax
         }, { transaction: t });
 
         await t.commit();

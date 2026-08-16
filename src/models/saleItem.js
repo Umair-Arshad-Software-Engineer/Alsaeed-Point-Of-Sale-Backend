@@ -1,3 +1,4 @@
+// models/SaleItem.js
 module.exports = (sequelize, DataTypes) => {
     const SaleItem = sequelize.define('SaleItem', {
         id: { 
@@ -19,7 +20,6 @@ module.exports = (sequelize, DataTypes) => {
             onDelete: 'CASCADE', 
             onUpdate: 'CASCADE',
         },
-        // ✅ ADD product_name column to store product name at time of sale
         product_name: {
             type: DataTypes.STRING(255),
             allowNull: false,
@@ -40,6 +40,17 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DECIMAL(10, 2), 
             allowNull: false 
         },
+        // ✅ Add tax fields
+        tax_percentage: {
+            type: DataTypes.DECIMAL(5, 2),
+            allowNull: false,
+            defaultValue: 0
+        },
+        tax_amount: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: false,
+            defaultValue: 0
+        }
     }, {
         tableName: 'sale_items',
         timestamps: true,
