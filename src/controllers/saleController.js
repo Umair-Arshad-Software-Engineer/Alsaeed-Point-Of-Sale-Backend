@@ -10,6 +10,14 @@ const DEFAULT_BRANCH_ID = process.env.DEFAULT_BRANCH_ID
     ? parseInt(process.env.DEFAULT_BRANCH_ID, 10)
     : null;
 
+const SALE_INCLUDES = [
+    {
+        association: 'items',
+        include: [{ association: 'product', attributes: PRODUCT_ATTRS }],
+    },
+    { association: 'seller', attributes: ['name'] },
+];
+
 // Get all sales
 const getAllSales = async (req, res) => {
     try {
@@ -19,13 +27,7 @@ const getAllSales = async (req, res) => {
 
         const sales = await db.Sale.findAll({
             where: whereClause,
-            include: [
-                {
-                    association: 'items',
-                    include: [{ association: 'product', attributes: PRODUCT_ATTRS }],
-                },
-                { association: 'seller', attributes: ['name'] },
-            ],
+            include: SALE_INCLUDES,
             order: [['sale_date', 'DESC']],
         });
         res.json({ success: true, sales });
@@ -39,13 +41,7 @@ const getAllSales = async (req, res) => {
 const getSale = async (req, res) => {
     try {
         const sale = await db.Sale.findByPk(req.params.id, {
-            include: [
-                {
-                    association: 'items',
-                    include: [{ association: 'product', attributes: PRODUCT_ATTRS }],
-                },
-                { association: 'seller', attributes: ['name'] },
-            ],
+            include: SALE_INCLUDES,
         });
 
         if (!sale) {
@@ -58,16 +54,42 @@ const getSale = async (req, res) => {
     }
 };
 
-    //createSale function
+// createSale function
 const createSale = async (req, res) => {
     try {
-        const { items, customer_name, customer_phone, discount = 0, branch_id } = req.body;
+        const {
+            items,
+            customer_name,
+            customer_phone,
+            discount = 0,
+            branch_id,
+            local_uuid, // ✅ client-supplied offline-sync identifier
+        } = req.body;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({
                 success: false,
                 message: 'At least one item is required'
             });
+        }
+
+        // ── Idempotency guard (fast path) ───────────────────────────────────
+        // If the client already sent this exact sale before (e.g. a retry
+        // after a dropped/slow response, or a queued sync-service replay),
+        // return the existing sale instead of creating a duplicate.
+        // This is what makes offline-sync retries safe.
+        if (local_uuid) {
+            const existing = await db.Sale.findOne({
+                where: { local_uuid },
+                include: SALE_INCLUDES,
+            });
+            if (existing) {
+                return res.status(200).json({
+                    success: true,
+                    sale: existing,
+                    message: 'Sale already exists (idempotent)'
+                });
+            }
         }
 
         // Resolve branch_id
@@ -88,73 +110,98 @@ const createSale = async (req, res) => {
             });
         }
 
-        const sale = await db.sequelize.transaction(async (t) => {
-            let subtotal = 0;
-            let totalTax = 0;
-            const resolvedItems = [];
+        let sale;
+        try {
+            sale = await db.sequelize.transaction(async (t) => {
+                let subtotal = 0;
+                let totalTax = 0;
+                const resolvedItems = [];
 
-            for (const item of items) {
-                const product = await db.Product.findByPk(item.product_id, { transaction: t });
-                if (!product) {
-                    throw new Error(`Product ${item.product_id} not found`);
+                for (const item of items) {
+                    const product = await db.Product.findByPk(item.product_id, { transaction: t });
+                    if (!product) {
+                        throw new Error(`Product ${item.product_id} not found`);
+                    }
+
+                    // Get tax percentage from product or from request
+                    const taxPercentage = item.tax_percentage || product.tax_percentage || 0;
+                    const unit_price = parseFloat(product.sale_rate);
+                    const itemSubtotal = unit_price * item.quantity;
+                    const itemTax = (itemSubtotal * taxPercentage) / 100;
+
+                    subtotal += itemSubtotal;
+                    totalTax += itemTax;
+
+                    resolvedItems.push({
+                        product_id: item.product_id,
+                        product_name: product.name,
+                        quantity: item.quantity,
+                        unit_price,
+                        subtotal: itemSubtotal,
+                        tax_percentage: taxPercentage,
+                        tax_amount: itemTax, // ✅ Store individual item tax
+                    });
                 }
 
-                // Get tax percentage from product or from request
-                const taxPercentage = item.tax_percentage || product.tax_percentage || 0;
-                const unit_price = parseFloat(product.sale_rate);
-                const itemSubtotal = unit_price * item.quantity;
-                const itemTax = (itemSubtotal * taxPercentage) / 100;
-                
-                subtotal += itemSubtotal;
-                totalTax += itemTax;
+                const parsedDiscount = parseFloat(discount) || 0;
+                const total_price = subtotal + totalTax - parsedDiscount; // ✅ Total = Subtotal + Tax - Discount
 
-                resolvedItems.push({
-                    product_id: item.product_id,
-                    product_name: product.name,
-                    quantity: item.quantity,
-                    unit_price,
-                    subtotal: itemSubtotal,
-                    tax_percentage: taxPercentage,
-                    tax_amount: itemTax, // ✅ Store individual item tax
-                });
-            }
+                if (total_price < 0) {
+                    throw new Error('Discount cannot exceed the total (subtotal + tax)');
+                }
 
-            const parsedDiscount = parseFloat(discount) || 0;
-            const total_price = subtotal + totalTax - parsedDiscount; // ✅ Total = Subtotal + Tax - Discount
-
-            if (total_price < 0) {
-                throw new Error('Discount cannot exceed the total (subtotal + tax)');
-            }
-
-            const newSale = await db.Sale.create({
-                local_uuid: crypto.randomUUID(),
-                branch_id: resolvedBranchId,
-                customer_name: customer_name || '',
-                customer_phone: customer_phone || '',
-                discount: parsedDiscount,
-                total_price,
-                total_tax: totalTax, // ✅ Save total tax for the sale
-                sold_by: req.user.id,
-            }, { transaction: t });
-
-            for (const item of resolvedItems) {
-                await db.SaleItem.create({
-                    ...item,
-                    sale_id: newSale.id
+                const newSale = await db.Sale.create({
+                    // ✅ Preserve the client's local_uuid so retries are
+                    // recognized as the same sale. Only fall back to a
+                    // server-generated uuid if the client didn't send one
+                    // (e.g. a sale created directly online with no offline
+                    // origin).
+                    local_uuid: local_uuid || crypto.randomUUID(),
+                    branch_id: resolvedBranchId,
+                    customer_name: customer_name || '',
+                    customer_phone: customer_phone || '',
+                    discount: parsedDiscount,
+                    total_price,
+                    total_tax: totalTax, // ✅ Save total tax for the sale
+                    sold_by: req.user.id,
                 }, { transaction: t });
-            }
 
-            return newSale;
-        });
+                for (const item of resolvedItems) {
+                    await db.SaleItem.create({
+                        ...item,
+                        sale_id: newSale.id
+                    }, { transaction: t });
+                }
+
+                return newSale;
+            });
+        } catch (createError) {
+            // ── Idempotency guard (race-condition fallback) ─────────────────
+            // Two near-simultaneous requests with the same local_uuid (e.g.
+            // the original request finally responding at the same moment a
+            // queued retry fires) can both pass the fast-path check above
+            // before either has committed. The unique constraint on
+            // local_uuid will reject the second insert — catch that here
+            // and return the row the other request just created instead of
+            // surfacing a 500.
+            if (createError.name === 'SequelizeUniqueConstraintError' && local_uuid) {
+                const existing = await db.Sale.findOne({
+                    where: { local_uuid },
+                    include: SALE_INCLUDES,
+                });
+                if (existing) {
+                    return res.status(200).json({
+                        success: true,
+                        sale: existing,
+                        message: 'Sale already exists (idempotent)'
+                    });
+                }
+            }
+            throw createError;
+        }
 
         const fullSale = await db.Sale.findByPk(sale.id, {
-            include: [
-                {
-                    association: 'items',
-                    include: [{ association: 'product', attributes: PRODUCT_ATTRS }],
-                },
-                { association: 'seller', attributes: ['name'] },
-            ],
+            include: SALE_INCLUDES,
         });
 
         res.status(201).json({
@@ -187,7 +234,7 @@ const createSale = async (req, res) => {
     }
 };
 
-//updateSale function (partial)
+// updateSale function (partial)
 
 const updateSale = async (req, res) => {
     const t = await db.sequelize.transaction();
@@ -221,7 +268,7 @@ const updateSale = async (req, res) => {
             const unit_price = parseFloat(product.sale_rate);
             const itemSubtotal = unit_price * item.quantity;
             const itemTax = (itemSubtotal * taxPercentage) / 100;
-            
+
             subtotal += itemSubtotal;
             totalTax += itemTax;
 
@@ -259,13 +306,7 @@ const updateSale = async (req, res) => {
         await t.commit();
 
         const updatedSale = await db.Sale.findByPk(sale.id, {
-            include: [
-                {
-                    association: 'items',
-                    include: [{ association: 'product', attributes: PRODUCT_ATTRS }],
-                },
-                { association: 'seller', attributes: ['name'] },
-            ],
+            include: SALE_INCLUDES,
         });
 
         res.json({ success: true, sale: updatedSale, message: 'Sale updated successfully' });
