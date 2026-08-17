@@ -346,6 +346,35 @@ const createSuperAdmin = async () => {
     }
 };
 
+const createDefaultUsers = async () => {
+    const defaultUsers = [
+        { name: 'Main', email: 'main@gmail.com', password: 'Main753', role: 'user', branch_id: 1 },
+        { name: 'Wapda Town', email: 'wapda@gmail.com', password: 'Wapda753', role: 'user', branch_id: null },
+        { name: 'Sate', email: 'sate@gmail.com', password: 'Sate753', role: 'user', branch_id: null },
+    ];
+
+    for (const u of defaultUsers) {
+        try {
+            const existing = await db.User.findOne({ where: { email: u.email } });
+            if (!existing) {
+                await db.User.create({
+                    name: u.name,
+                    email: u.email,
+                    password: u.password, // hashed automatically by the User model's beforeCreate hook, same as createSuperAdmin
+                    role: u.role,
+                    branch_id: u.branch_id,
+                    is_active: true
+                });
+                console.log(`✅ Default user created: ${u.email}`);
+            } else {
+                console.log(`✅ Default user already exists: ${u.email}`);
+            }
+        } catch (error) {
+            console.error(`Error creating default user ${u.email}:`, error);
+        }
+    }
+};
+
 const changeUserPassword = async (req, res) => {
     try {
         const { id } = req.params;
@@ -392,5 +421,7 @@ module.exports = {
     getUserWithBranches,
     deleteUser,
     createSuperAdmin,
-    changeUserPassword
+    changeUserPassword,
+    createDefaultUsers,   // ← add this
+
 };

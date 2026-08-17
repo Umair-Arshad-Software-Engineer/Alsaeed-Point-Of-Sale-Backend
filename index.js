@@ -10,7 +10,7 @@ const categoryRoutes = require('./src/routes/categoryRoutes');
 const brandRoutes = require('./src/routes/brandRoutes');
 const unitRoutes = require('./src/routes/unitRoutes');
 const branchRoutes = require('./src/routes/branchRoutes');
-const { createSuperAdmin } = require('./src/controllers/authController');
+const { createSuperAdmin ,createDefaultUsers } = require('./src/controllers/authController');
 const { protect, adminOnly, superAdminOnly } = require('./src/middleware/authMiddleware');
 
 dotenv.config();
@@ -186,7 +186,7 @@ const startServer = async () => {
         }
 
         await createSuperAdmin();
-
+        await createDefaultUsers();   // ← add this line
         app.listen(PORT, '0.0.0.0', () => {
             console.log('\n🚀 POS Management System Server is running!');
             console.log(`📡 Server URL: http://localhost:${PORT}`);
