@@ -348,7 +348,7 @@ const createSuperAdmin = async () => {
 
 const createDefaultUsers = async () => {
     const defaultUsers = [
-        { name: 'Main', email: 'main@gmail.com', password: 'Main753', role: 'user', branch_id: 1 },
+        { name: 'Main', email: 'main@gmail.com', password: 'Main753', role: 'user', branch_id: null },
         { name: 'Wapda Town', email: 'wapda@gmail.com', password: 'Wapda753', role: 'user', branch_id: null },
         { name: 'Sate', email: 'sate@gmail.com', password: 'Sate753', role: 'user', branch_id: null },
     ];
