@@ -55,7 +55,7 @@ const register = async (req, res) => {
             email,
             password,
             role: role || 'user',
-            branch_id: branch_id || null
+            branch_id: null
         });
 
         const userWithBranch = await db.User.findByPk(user.id, {
