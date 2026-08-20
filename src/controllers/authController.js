@@ -324,54 +324,123 @@ const deleteUser = async (req, res) => {
     }
 };
 
+// src/controllers/authController.js
+
+/**
+ * Creates Super Admin and Main Branch
+ * Order: User (no branch) → Branch → User (update with branch)
+ */
 const createSuperAdmin = async () => {
     try {
         const superAdminEmail = 'techsoft@gmail.com';
-        const existingAdmin = await db.User.findOne({ where: { email: superAdminEmail } });
+        const existingAdmin = await db.User.findOne({ 
+            where: { email: superAdminEmail } 
+        });
 
         if (!existingAdmin) {
-            await db.User.create({
+            console.log('👑 Creating Super Admin and Main Branch...');
+
+            // STEP 1: Create Super Admin WITHOUT branch_id
+            const user = await db.User.create({
                 name: 'Super Admin',
                 email: superAdminEmail,
                 password: '1129@AliHaider',
                 role: 'super_admin',
-                is_active: true
+                is_active: true,
+                branch_id: null  // ← Super admin doesn't need a branch initially
             });
-            console.log('✅ Super admin created successfully');
+            console.log(`✅ Super Admin created with ID: ${user.id}`);
+
+            // STEP 2: Create Main Branch with created_by = user.id
+            const branch = await db.Branch.create({
+                name: 'Main Branch',
+                address: '123 Main Street, City',
+                phone: '+1234567890',
+                is_active: true,
+                created_by: user.id  // ← NOW we have the user ID
+            });
+            console.log(`✅ Main Branch created with ID: ${branch.id}`);
+
+            // STEP 3: Update Super Admin with branch_id
+            await user.update({ branch_id: branch.id });
+            console.log('✅ Super Admin updated with branch assignment');
+
+            console.log('✅ Super Admin and Main Branch created successfully');
         } else {
-            console.log('✅ Super admin already exists');
+            console.log('✅ Super Admin already exists');
         }
     } catch (error) {
-        console.error('Error creating super admin:', error);
+        console.error('❌ Error creating super admin:', error);
+        throw error;
     }
 };
 
+/**
+ * Creates default users with proper branch assignment
+ */
 const createDefaultUsers = async () => {
-    const defaultUsers = [
-        { name: 'Main', email: 'main@gmail.com', password: 'Main753', role: 'user', branch_id: null },
-        { name: 'Wapda Town', email: 'wapda@gmail.com', password: 'Wapda753', role: 'user', branch_id: null },
-        { name: 'Sate', email: 'sate@gmail.com', password: 'Sate753', role: 'user', branch_id: null },
-    ];
+    try {
+        // Get or create Main Branch
+        let mainBranch = await db.Branch.findOne({ 
+            where: { name: 'Main Branch' } 
+        });
 
-    for (const u of defaultUsers) {
-        try {
-            const existing = await db.User.findOne({ where: { email: u.email } });
-            if (!existing) {
-                await db.User.create({
-                    name: u.name,
-                    email: u.email,
-                    password: u.password, // hashed automatically by the User model's beforeCreate hook, same as createSuperAdmin
-                    role: u.role,
-                    branch_id: u.branch_id,
-                    is_active: true
-                });
-                console.log(`✅ Default user created: ${u.email}`);
-            } else {
-                console.log(`✅ Default user already exists: ${u.email}`);
+        if (!mainBranch) {
+            console.log('🏢 Creating Main Branch for default users...');
+            
+            // Get super admin first
+            const superAdmin = await db.User.findOne({ 
+                where: { email: 'techsoft@gmail.com' } 
+            });
+
+            if (!superAdmin) {
+                throw new Error('Super Admin must exist before creating branches');
             }
-        } catch (error) {
-            console.error(`Error creating default user ${u.email}:`, error);
+
+            mainBranch = await db.Branch.create({
+                name: 'Main Branch',
+                address: '123 Main Street, City',
+                phone: '+1234567890',
+                is_active: true,
+                created_by: superAdmin.id  // ← Super admin creates the branch
+            });
+            console.log(`✅ Main Branch created with ID: ${mainBranch.id}`);
         }
+
+        const defaultUsers = [
+            { name: 'Main', email: 'main@gmail.com', password: 'Main753', role: 'user' },
+            { name: 'Wapda Town', email: 'wapda@gmail.com', password: 'Wapda753', role: 'user' },
+            { name: 'Sate', email: 'sate@gmail.com', password: 'Sate753', role: 'user' },
+        ];
+
+        for (const u of defaultUsers) {
+            try {
+                const existing = await db.User.findOne({ 
+                    where: { email: u.email } 
+                });
+
+                if (!existing) {
+                    await db.User.create({
+                        name: u.name,
+                        email: u.email,
+                        password: u.password,
+                        role: u.role,
+                        branch_id: mainBranch.id,
+                        is_active: true
+                    });
+                    console.log(`✅ Default user created: ${u.email}`);
+                } else {
+                    console.log(`✅ Default user already exists: ${u.email}`);
+                }
+            } catch (error) {
+                console.error(`❌ Error creating default user ${u.email}:`, error);
+            }
+        }
+
+        console.log('✅ Default users creation completed');
+    } catch (error) {
+        console.error('❌ Error creating default users:', error);
+        throw error;
     }
 };
 
