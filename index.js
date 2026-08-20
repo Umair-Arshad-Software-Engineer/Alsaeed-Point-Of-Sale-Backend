@@ -176,25 +176,35 @@ app.use((req, res) => {
 });
 
 // Start server
+
 const startServer = async () => {
     try {
         const dbInitialized = await initializeDatabase();
-
         if (!dbInitialized) {
             console.error('❌ Failed to initialize database');
             process.exit(1);
         }
 
+        // ✅ Only create users - NO branches created automatically
         await createSuperAdmin();
-        await createDefaultUsers();   // ← add this line
+        await createDefaultUsers();
+        
+        // Start the server
         app.listen(PORT, '0.0.0.0', () => {
             console.log('\n🚀 POS Management System Server is running!');
             console.log(`📡 Server URL: http://localhost:${PORT}`);
             console.log(`📡 Access from: http://72.60.40.108:${PORT}`);
+            
             console.log('\n🔐 Super Admin Credentials:');
             console.log('   Email: techsoft@gmail.com');
             console.log('   Password: 1129@AliHaider');
-
+            
+            console.log('\n👤 Default Users (unassigned to any branch):');
+            console.log('   • main@gmail.com / Main753');
+            console.log('   • wapda@gmail.com / Wapda753');
+            console.log('   • sate@gmail.com / Sate753');
+            console.log('\n📌 Note: Super Admin must create branches and assign users');
+            
             console.log('\n📊 Available Endpoints:');
             console.log('   • Auth: /api/auth');
             console.log('   • Products: /api/products');
@@ -204,7 +214,7 @@ const startServer = async () => {
             console.log('   • Branches: /api/branches');
             console.log('   • Sales: /api/sales');
             console.log('   • Dashboard: /api/dashboard/stats');
-
+            
             console.log('\n✨ Server is ready to accept requests!\n');
         });
 
