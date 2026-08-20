@@ -25,7 +25,7 @@ const SaleItemModel = require('./saleItem')(sequelize, DataTypes);
 
 const BranchModel = require('./branch')(sequelize, DataTypes);
 
-const UserBranchModel = require('./userBranch')(sequelize, DataTypes);
+// ❌ REMOVED: UserBranchModel - no longer needed
 
 
 // ============================================================
@@ -58,7 +58,7 @@ UserModel.hasMany(SaleModel, {
 });
 
 
-// User belongs to one branch
+// User belongs to one branch (single branch per user)
 UserModel.belongsTo(BranchModel, {
     foreignKey: 'branch_id',
     as: 'branch'
@@ -220,7 +220,7 @@ const db = {
     SaleItem: SaleItemModel,
 
     Branch: BranchModel,
-    UserBranch: UserBranchModel
+    // ❌ REMOVED: UserBranch - no longer needed
 };
 
 

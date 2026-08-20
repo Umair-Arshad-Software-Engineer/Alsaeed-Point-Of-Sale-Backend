@@ -324,10 +324,6 @@ const deleteUser = async (req, res) => {
     }
 };
 
-
-/**
- * Creates ONLY Super Admin - No branch created
- */
 const createSuperAdmin = async () => {
     try {
         const superAdminEmail = 'techsoft@gmail.com';
@@ -357,10 +353,7 @@ const createSuperAdmin = async () => {
     }
 };
 
-/**
- * Creates default users WITHOUT any branch assignment
- * They will be unassigned until Super Admin assigns them
- */
+
 const createDefaultUsers = async () => {
     const defaultUsers = [
         { name: 'Main', email: 'main@gmail.com', password: 'Main753', role: 'user' },

@@ -10,15 +10,15 @@ const categoryRoutes = require('./src/routes/categoryRoutes');
 const brandRoutes = require('./src/routes/brandRoutes');
 const unitRoutes = require('./src/routes/unitRoutes');
 const branchRoutes = require('./src/routes/branchRoutes');
-const { createSuperAdmin ,createDefaultUsers } = require('./src/controllers/authController');
+const { createSuperAdmin, createDefaultUsers } = require('./src/controllers/authController');
 const { protect, adminOnly, superAdminOnly } = require('./src/middleware/authMiddleware');
 
 dotenv.config();
 
 const app = express();
 
-// ✅ FIX: Use PORT from .env or default to 3002
-const PORT = process.env.PORT || 3005;  // ← CHANGED FROM 3001 TO 3002
+// ✅ FIX: Use PORT from .env or default to 3005
+const PORT = process.env.PORT || 3005;
 
 // Middleware
 app.use(cors({
@@ -176,7 +176,6 @@ app.use((req, res) => {
 });
 
 // Start server
-
 const startServer = async () => {
     try {
         const dbInitialized = await initializeDatabase();
